@@ -278,20 +278,29 @@ class DDGSearch:
             return f"Failed to get website contents, reason: Empty contents was provided from {url} after {self.retries} retries."
 
     def _clean_html(self, html: str):
+        if not html:
+            return html
         try:
             if self.cleaning == HTMLCleaning.remove_tags:
+                from bs4 import BeautifulSoup
+                # may use from cache because this has been already imported in __init__ with error handling.
+
                 CLEANED_TAGS = ["script", "style", "header", "footer", "nav", "aside", "form"]
                 soup = BeautifulSoup(html, "html.parser")  # type: ignore # noqa: F821
                 for tag in soup.find_all(CLEANED_TAGS):
                     tag.decompose()
                 return str(soup)
             elif self.cleaning == HTMLCleaning.readability_lxml:
+                import readability  # may use from cache because this has been already imported in __init__ with error handling.
+
                 return readability.Document(html).summary()  # type: ignore # noqa: F821
             elif self.cleaning == HTMLCleaning.trafilatura:
+                import trafilatura  # may use from cache because this has been already imported in __init__ with error handling.
+
                 return trafilatura.extract(  # type: ignore # noqa: F821
                     html,
                     output_format="html",
-                    with_metadata=True,
+                    with_metadata=False,  # avoid TypeError
                     include_comments=True,
                     include_tables=True,
                     include_formatting=True,
@@ -300,7 +309,8 @@ class DDGSearch:
                 return html
         except Exception as e:
             self.logger.error(
-                f"_clean_html: Failed to clean HTML, reason: {e.__class__.__name__} {e}. Cleaning did not applied."
+                f"_clean_html: Failed to clean HTML, reason: {e.__class__.__name__} {e}. Cleaning did not applied.({type(html)}, {textwrap.shorten(html, width=200, placeholder='…')})",
+                exc_info=True,
             )
             return html
 
