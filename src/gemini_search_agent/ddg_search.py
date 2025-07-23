@@ -112,7 +112,7 @@ class DDGSearch:
             List of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
-        with httpx.Client(headers=self.headers, follow_redirects=True) as client:
+        with httpx.Client(headers=self.headers, follow_redirects=True, timeout=self.timeout) as client:
             search_results: List[Dict[str, str]] = []
             for _ in range(self.retries):
                 try:
@@ -200,7 +200,7 @@ class DDGSearch:
             List of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
-        async with httpx.AsyncClient(headers=self.headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(headers=self.headers, follow_redirects=True, timeout=self.timeout) as client:
             search_results: List[Dict[str, str]] = []
             for _ in range(self.retries):
                 try:

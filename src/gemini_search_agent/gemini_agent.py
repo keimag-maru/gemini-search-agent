@@ -2,7 +2,7 @@ import asyncio
 import re
 import time
 from logging import getLogger
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Literal, Union
 
 from google.api_core.exceptions import ResourceExhausted
 from langchain_core.tools import BaseTool
@@ -44,31 +44,49 @@ class GeminiAgent:
             kwargs["google_api_key"] = google_api_key
         model = ChatGoogleGenerativeAI(**kwargs)
         self.agent_executor = create_react_agent(model, tools)
-        self.messages = [{"role": "system", "content": system_prompt}]
+        if system_prompt:
+            self.messages = [{"role": "system", "content": system_prompt}]
+        else:
+            self.messages = []
 
     @property
     def system_prompt(self):
-        return self.messages[0]["content"]
+        if self.messages:
+            for message in reversed(self.messages):
+                if message.get("role", "") == "system":
+                    return message["content"]
+        return ""
 
     @system_prompt.setter
     def system_prompt(self, prompt_message: str):
-        if self.messages[0].get("role", "") == "system":
-            self.messages[0]["content"] = prompt_message
+        if self.messages:
+            if self.messages[0].get("role", "") == "system":
+                self.messages[0]["content"] = prompt_message
+            else:
+                self.messages.insert(0, {"role": "system", "content": prompt_message})
         else:
-            self.messages.insert(0, {"role": "system", "content": prompt_message})
+            self.messages = [{"role": "system", "content": prompt_message}]
 
-    def invoke(self, user_message: str, output="message") -> Union[str, Dict[str, Any], None]:
+    def invoke(
+        self,
+        message: str,
+        role: str = "user",
+        output: Union[Literal["message"], Literal["raw"]] = "message",
+        add_to_history: bool = True,
+    ) -> Union[str, Dict[str, Any], None]:
         """Invoke Gemini ReAct agent and get response.
 
         Args:
-            user_message (str): Input message as User (will be stored for later use)
-            output (str, optional): "message" for response message or "raw" for raw Gemini API response. Defaults to "message".
+            message (str): Input message
+            role (str): Role of message
+            output ("message" or "raw") (Literal, optional): "message" for response message or "raw" for raw Gemini API response. Defaults to "message".
+            add_to_history (bool): Whether to append the response to `self.messages` to preserve context. Defaults to True.
 
         Returns:
             String of Gemini response message if "message" is set to output, or Dict of raw Gemini API response if "raw" is set to output.
             If failed to get response from Gemini, returns "" (when "message" is set to output) or None (when "raw" is set to output).
         """
-        self.messages.append({"role": "user", "content": user_message})
+        self.messages.append({"role": role, "content": message})
         retries = 0
         while True:
             if self.retries > 0 and retries > self.retries:
@@ -86,7 +104,8 @@ class GeminiAgent:
                     self.logger.debug("Retrying...")
                     continue
                 message = response["messages"][-1].content
-                self.messages.append({"role": "ai", "message": message})
+                if add_to_history:
+                    self.messages.append({"role": "ai", "content": message})
                 if output == "message":
                     return message
                 else:
@@ -108,18 +127,26 @@ class GeminiAgent:
         else:
             return None
 
-    async def ainvoke(self, user_message: str, output="message") -> Union[str, Dict[str, Any], None]:
+    async def ainvoke(
+        self,
+        message: str,
+        role: str = "user",
+        output: Union[Literal["message"], Literal["raw"]] = "message",
+        add_to_history: bool = True,
+    ) -> Union[str, Dict[str, Any], None]:
         """Invoke Gemini ReAct agent and get response asynchronously.
 
         Args:
-            user_message (str): Input message as User (will be stored for later use)
-            output (str, optional): "message" for response message or "raw" for raw Gemini API response. Defaults to "message".
+            user_message (str): Input message
+            role (str): Role of message
+            output ("message" or "raw") (Literal, optional): "message" for response message or "raw" for raw Gemini API response. Defaults to "message".
+            add_to_history (bool): Whether to append the response to `self.messages` to preserve context. Defaults to True.
 
         Returns:
             String of Gemini response message if "message" is set to output, or Dict of raw Gemini API response if "raw" is set to output.
             If failed to get response from Gemini, returns "" (when "message" is set to output) or None (when "raw" is set to output).
         """
-        self.messages.append({"role": "user", "content": user_message})
+        self.messages.append({"role": role, "content": message})
         retries = 0
         while True:
             if self.retries > 0 and retries > self.retries:
@@ -137,7 +164,8 @@ class GeminiAgent:
                     self.logger.debug("Retrying...")
                     continue
                 message = response["messages"][-1].content
-                self.messages.append({"role": "ai", "message": message})
+                if add_to_history:
+                    self.messages.append({"role": "ai", "content": message})
                 if output == "message":
                     return message
                 else:
