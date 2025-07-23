@@ -1,6 +1,7 @@
 import asyncio
 import time
 from enum import Enum
+from logging import getLogger
 from typing import Dict, List, Union
 
 import httpx
@@ -17,6 +18,8 @@ class HTMLCleaning(Enum):
 
 
 class DDGSearch:
+    logger = getLogger("DDGSearch")
+
     def __init__(
         self,
         headers: Union[Dict[str, str], None] = {
@@ -47,8 +50,8 @@ class DDGSearch:
             timeout (int, optional): Timeout value for the HTTP client. Defaults to None.
             verify (bool): SSL verification when making the request. Defaults to True.
             region: The region to use for the search (e.g., us-en, uk-en, ru-ru, etc.).
-            safesearch: The safesearch setting (e.g., on, moderate, off).
-            timelimit: The timelimit for the search (e.g., d, w, m, y).
+            safesearch: The safe-search setting (e.g., on, moderate, off).
+            timelimit: The time limit for the search (e.g., d, w, m, y).
             num_results: The number of results to return.
             page: The page of results to return.
             backend: A single or list of backends. Defaults to "auto".
@@ -74,21 +77,21 @@ class DDGSearch:
                 from bs4 import BeautifulSoup  # noqa: F401
             except ImportError:
                 raise ImportError(
-                    "Please run `pip install BeautifulSoup4` or try `pip install gemini-search-agent[all]`"
+                    "This feature requires additional dependency. Please run `pip install BeautifulSoup4`."
                 )
         elif cleaning == HTMLCleaning.readability_lxml:
             try:
                 import readability  # noqa: F401
             except ImportError:
                 raise ImportError(
-                    "Please run `pip install readability-lxml` or try `pip install gemini-search-agent[all]`"
+                    "This feature requires additional dependency. Please run `pip install readability-lxml`."
                 )
         elif cleaning == HTMLCleaning.trafilatura:
             try:
                 import trafilatura  # noqa: F401
             except ImportError:
                 raise ImportError(
-                    "Please run `pip install trafilatura[all]` or try `pip install gemini-search-agent[all]`"
+                    "This feature requires additional dependency. Please run `pip install trafilatura[all]`."
                 )
         self.retries = retries
         self.retry_delay = retry_delay
@@ -100,10 +103,10 @@ class DDGSearch:
         self,
         query: str,
     ) -> Union[List[Dict[str, str]], str]:
-        """Search keywrods with DuckDuckGo Text Search and return search results with each websites' contents.
+        """Search keywords with DuckDuckGo Text Search and return search results with each websites' contents.
 
         Args:
-            query (str): Search Query (Query params: https://duckduckgo.com/params).
+            query (str): Search query (Query params: https://duckduckgo.com/params).
 
         Returns:
             List of dictionaries with search results with each websites' contents,
@@ -123,14 +126,20 @@ class DDGSearch:
                             page=self.page,
                             backend=self.backend,
                         )
-                except RatelimitException as e:
+                except RatelimitException:
                     time.sleep(self.retry_delay)
                     continue
                 except DDGSException as e:
+                    self.logger.error(
+                        f"search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
+                    )
                     return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
                 else:
                     break
             if not search_results:
+                self.logger.error(
+                    f"search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
+                )
                 return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
             for result in search_results:
                 url = result.get("href", "")
@@ -141,7 +150,7 @@ class DDGSearch:
         """Get specified website contents.
 
         Args:
-            client (httpx.AsyncClient): httpx syncronous client.
+            client (httpx.AsyncClient): httpx synchronous client.
             url (str): Target website url.
 
         Returns:
@@ -158,22 +167,31 @@ class DDGSearch:
                 html = resp.text
                 website_contents = self._clean_html(html)
             except httpx.HTTPStatusError as e:
+                self.logger.debug(
+                    f"_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
+                )
                 time.sleep(self.retry_delay)
                 continue
             except Exception as e:
+                self.logger.error(
+                    f"_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                )
                 return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
             else:
                 break
         if website_contents:
             return website_contents
         else:
+            self.logger.error(
+                f"_get_website_contents: Failed to get website contents, reason: Empty contents was provided from {url} after {self.retries} retries."
+            )
             return f"Failed to get website contents, reason: Empty contents was provided from {url} after {self.retries} retries."
 
     async def async_search_with_contents(
         self,
         query: str,
     ) -> Union[List[Dict[str, str]], str]:
-        """Search keywrods with DuckDuckGo Text Search and return search results with each websites' contents asyncronously.
+        """Search keywords with DuckDuckGo Text Search and return search results with each websites' contents asynchronously.
 
         Args:
             query (str): Search Query (Query params: https://duckduckgo.com/params).
@@ -196,14 +214,20 @@ class DDGSearch:
                             page=self.page,
                             backend=self.backend,
                         )
-                except RatelimitException as e:
+                except RatelimitException:
                     await asyncio.sleep(self.retry_delay)
                     continue
                 except DDGSException as e:
+                    self.logger.error(
+                        f"async_search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
+                    )
                     return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
                 else:
                     break
             if not search_results:
+                self.logger.error(
+                    f"async_search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
+                )
                 return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
             urls = [result.get("href", "") for result in search_results]
             tasks = [self._async_get_website_contents(client, url) for url in urls]
@@ -213,10 +237,10 @@ class DDGSearch:
             return search_results
 
     async def _async_get_website_contents(self, client: httpx.AsyncClient, url: str) -> str:
-        """Get specified website contents asyncronously.
+        """Get specified website contents asynchronously.
 
         Args:
-            client (httpx.AsyncClient): httpx asyncronous client.
+            client (httpx.AsyncClient): httpx asynchronous client.
             url (str): Target website url.
 
         Returns:
@@ -233,34 +257,52 @@ class DDGSearch:
                 html = resp.text
                 website_contents = self._clean_html(html)
             except httpx.HTTPStatusError as e:
+                self.logger.debug(
+                    f"_async_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
+                )
                 await asyncio.sleep(self.retry_delay)
                 continue
             except Exception as e:
+                self.logger.error(
+                    f"_async_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                )
                 return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
             else:
                 break
         if website_contents:
             return website_contents
         else:
+            self.logger.error(
+                f"_async_get_website_contents: Failed to get website contents, reason: Empty contents was provided from {url} after {self.retries} retries."
+            )
             return f"Failed to get website contents, reason: Empty contents was provided from {url} after {self.retries} retries."
 
     def _clean_html(self, html: str):
-        if self.cleaning == HTMLCleaning.remove_tags:
-            CLEANED_TAGS = ["script", "style", "header", "footer", "nav", "aside", "form"]
-            soup = BeautifulSoup(html, "html.parser")  # type: ignore # noqa: F821
-            for tag in soup.find_all(CLEANED_TAGS):
-                tag.decompose()
-            return str(soup)
-        elif self.cleaning == HTMLCleaning.readability_lxml:
-            return readability.Document(html).summary()  # type: ignore # noqa: F821
-        elif self.cleaning == HTMLCleaning.trafilatura:
-            return trafilatura.extract(  # type: ignore # noqa: F821
-                html,
-                output_format="html",
-                with_metadata=True,
-                include_comments=True,
-                include_tables=True,
-                include_formatting=True,
+        try:
+            if self.cleaning == HTMLCleaning.remove_tags:
+                CLEANED_TAGS = ["script", "style", "header", "footer", "nav", "aside", "form"]
+                soup = BeautifulSoup(html, "html.parser")  # type: ignore # noqa: F821
+                for tag in soup.find_all(CLEANED_TAGS):
+                    tag.decompose()
+                return str(soup)
+            elif self.cleaning == HTMLCleaning.readability_lxml:
+                return readability.Document(html).summary()  # type: ignore # noqa: F821
+            elif self.cleaning == HTMLCleaning.trafilatura:
+                return trafilatura.extract(  # type: ignore # noqa: F821
+                    html,
+                    output_format="html",
+                    with_metadata=True,
+                    include_comments=True,
+                    include_tables=True,
+                    include_formatting=True,
+                )
+            else:
+                return html
+        except Exception as e:
+            self.logger.error(
+                f"_clean_html: Failed to clean HTML, reason: {e.__class__.__name__} {e}. Cleaning did not applied."
             )
-        else:
             return html
+
+
+__all__ = ["DDGSearch", "HTMLCleaning"]

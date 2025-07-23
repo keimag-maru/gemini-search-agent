@@ -46,7 +46,18 @@ class GeminiAgent:
         self.agent_executor = create_react_agent(model, tools)
         self.messages = [{"role": "system", "content": system_prompt}]
 
-    def invoke(self, user_message: str, output="message") -> str | Dict[str, Any] | None:
+    @property
+    def system_prompt(self):
+        return self.messages[0]["content"]
+
+    @system_prompt.setter
+    def system_prompt(self, prompt_message: str):
+        if self.messages[0].get("role", "") == "system":
+            self.messages[0]["content"] = prompt_message
+        else:
+            self.messages.insert(0, {"role": "system", "content": prompt_message})
+
+    def invoke(self, user_message: str, output="message") -> Union[str, Dict[str, Any], None]:
         """Invoke Gemini ReAct agent and get response.
 
         Args:
@@ -69,7 +80,7 @@ class GeminiAgent:
                     if self.retry_delay > 0:
                         sleep_sec = self.retry_delay
                     else:
-                        sleep_sec = self._extract_retry_delay(e)
+                        sleep_sec = 2
                     self.logger.info(f"Gemini did not return any response. Retrying in {sleep_sec} seconds...")
                     time.sleep(sleep_sec)
                     self.logger.debug("Retrying...")
@@ -97,8 +108,8 @@ class GeminiAgent:
         else:
             return None
 
-    async def ainvoke(self, user_message: str, output="message") -> str | Dict[str, Any] | None:
-        """Invoke Gemini ReAct agent and get response asyncronously.
+    async def ainvoke(self, user_message: str, output="message") -> Union[str, Dict[str, Any], None]:
+        """Invoke Gemini ReAct agent and get response asynchronously.
 
         Args:
             user_message (str): Input message as User (will be stored for later use)
@@ -120,7 +131,7 @@ class GeminiAgent:
                     if self.retry_delay > 0:
                         sleep_sec = self.retry_delay
                     else:
-                        sleep_sec = self._extract_retry_delay(e)
+                        sleep_sec = 2
                     self.logger.info(f"Gemini did not return any response. Retrying in {sleep_sec} seconds...")
                     await asyncio.sleep(sleep_sec)
                     self.logger.debug("Retrying...")
@@ -157,3 +168,6 @@ class GeminiAgent:
                 "_extract_retry_delay: Could not extract retry delay from error message. Defaulting to 5 seconds."
             )
             return 5
+
+
+__all__ = ["GeminiAgent"]

@@ -9,12 +9,14 @@ description = 'Gemini ReAct Agent by Langgraph with original web-searching tool.
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
-keywords = []
+keywords = ["Gemini", "ReAct", "Agent", "langchain", "langgraph", "function calling", "ddgs", "duckduckgo-search", "wrapper"]
 authors = [
   { name = "Keisuke Magara", email = "197999578+keimag-maru@users.noreply.github.com" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
