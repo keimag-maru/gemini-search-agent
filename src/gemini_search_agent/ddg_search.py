@@ -17,6 +17,79 @@ class HTMLCleaning(Enum):
     trafilatura = 3
 
 
+class DDGSearchCache:
+    def __init__(self, max_size: int = 50, max_age: int = -1, gc_timing: int = 10) -> None:
+        self.data = {}
+        self.metadata = []  # [(data-key, create-time)]
+        self.max_size = max_size
+        self.max_age = max_age
+        self.gc_timing = gc_timing
+        self.num_of_calling = 0
+
+    def add(self, key, value):
+        self.num_of_calling += 1
+        self.data[key] = value
+        self.metadata.append((key, time.time()))
+        if self.gc_timing <= 0 or self.num_of_calling % self.gc_timing == 0:
+            self.remove_expired()
+
+    def get(self, key, default=None):
+        self.num_of_calling += 1
+        if self.gc_timing <= 0 or self.num_of_calling % self.gc_timing == 0:
+            self.remove_expired()
+        return self.data.get(key, default)
+
+    def remove(self, key):
+        self.num_of_calling += 1
+        del self.data[key]
+        if self.gc_timing <= 0 or self.num_of_calling % self.gc_timing == 0:
+            self.remove_expired()
+
+    def clear(self):
+        self.num_of_calling = 0
+        self.data.clear()
+        self.metadata.clear()
+
+    def remove_expired(self):
+        """max_sizeになるように古い順に消す。そのあと、max_ageよりも古いものを消す"""
+        self.metadata.sort(key=lambda x: x[1])
+        if self.max_size >= 0:
+            while len(self.data) > self.max_size:
+                key, _ = self.metadata.pop(0)
+                del self.data[key]
+        if self.max_age >= 0:
+            while self.metadata and time.time() - self.metadata[-1][1] > self.max_age:
+                key, _ = self.metadata.pop()
+                del self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __getitem__(self, key):
+        self.num_of_calling += 1
+        if self.gc_timing <= 0 or self.num_of_calling % self.gc_timing == 0:
+            self.remove_expired()
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.add(key, value)
+
+    def __delitem__(self, key):
+        self.remove(key)
+
+    def __contains__(self, key):
+        return key in self.data
+
+    def __str__(self):
+        return str(self.data)
+
+    def __repr__(self):
+        return repr(self.data)
+
+
 class DDGSearch:
     logger = getLogger("DDGSearch")
 
@@ -35,6 +108,7 @@ class DDGSearch:
         page: int = 1,
         backend: str | list[str] = "auto",
         cleaning: HTMLCleaning = HTMLCleaning.none,
+        cache: Union[DDGSearchCache, None] = DDGSearchCache(),
         retries: int = 3,
         retry_delay: int = 5,
     ) -> None:
@@ -93,6 +167,7 @@ class DDGSearch:
                 raise ImportError(
                     "This feature requires additional dependency. Please run `pip install trafilatura[all]`."
                 )
+        self.cache = cache
         self.retries = retries
         self.retry_delay = retry_delay
         self.tool: StructuredTool = StructuredTool.from_function(
@@ -112,7 +187,9 @@ class DDGSearch:
             List of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
-        with httpx.Client(headers=self.headers, follow_redirects=True, timeout=self.timeout) as client:
+        with httpx.Client(
+            headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
+        ) as client:
             search_results: List[Dict[str, str]] = []
             for _ in range(self.retries):
                 try:
@@ -126,6 +203,9 @@ class DDGSearch:
                             page=self.page,
                             backend=self.backend,
                         )
+                        if not search_results:
+                            time.sleep(self.retry_delay)
+                            continue
                 except RatelimitException:
                     time.sleep(self.retry_delay)
                     continue
@@ -159,26 +239,35 @@ class DDGSearch:
         """
         if not url:
             return "Failed to get website contents, reason: No url was provided."
-        website_contents = None
-        for _ in range(self.retries):
-            try:
-                resp = client.get(url)
-                resp.raise_for_status()
-                html = resp.text
-                website_contents = self._clean_html(html)
-            except httpx.HTTPStatusError as e:
-                self.logger.debug(
-                    f"_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
-                )
-                time.sleep(self.retry_delay)
-                continue
-            except Exception as e:
-                self.logger.error(
-                    f"_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
-                )
-                return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
-            else:
-                break
+        if self.cache:
+            self.logger.debug(f"Data for {url} was found in cache.")
+            website_contents = self.cache.get(url, None)
+        else:
+            website_contents = None
+            for _ in range(self.retries):
+                try:
+                    resp = client.get(url)
+                    resp.raise_for_status()
+                    html = resp.text
+                    website_contents = self._clean_html(html)
+                    if not website_contents:
+                        time.sleep(self.retry_delay)
+                        continue
+                except httpx.HTTPStatusError as e:
+                    self.logger.debug(
+                        f"_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
+                    )
+                    time.sleep(self.retry_delay)
+                    continue
+                except Exception as e:
+                    self.logger.error(
+                        f"_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                    )
+                    return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                else:
+                    if self.cache:
+                        self.cache.add(url, website_contents)
+                    break
         if website_contents:
             return website_contents
         else:
@@ -200,7 +289,9 @@ class DDGSearch:
             List of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
-        async with httpx.AsyncClient(headers=self.headers, follow_redirects=True, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(
+            headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
+        ) as client:
             search_results: List[Dict[str, str]] = []
             for _ in range(self.retries):
                 try:
@@ -214,6 +305,9 @@ class DDGSearch:
                             page=self.page,
                             backend=self.backend,
                         )
+                        if not search_results:
+                            await asyncio.sleep(self.retry_delay)
+                            continue
                 except RatelimitException:
                     await asyncio.sleep(self.retry_delay)
                     continue
@@ -249,26 +343,35 @@ class DDGSearch:
         """
         if not url:
             return "Failed to get website contents, reason: No url was provided."
-        website_contents = None
-        for _ in range(self.retries):
-            try:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                html = resp.text
-                website_contents = self._clean_html(html)
-            except httpx.HTTPStatusError as e:
-                self.logger.debug(
-                    f"_async_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
-                )
-                await asyncio.sleep(self.retry_delay)
-                continue
-            except Exception as e:
-                self.logger.error(
-                    f"_async_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
-                )
-                return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
-            else:
-                break
+        if self.cache:
+            self.logger.debug(f"Data for {url} was found in cache.")
+            website_contents = self.cache.get(url, None)
+        else:
+            website_contents = None
+            for _ in range(self.retries):
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    html = resp.text
+                    website_contents = self._clean_html(html)
+                    if not website_contents:
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                except httpx.HTTPStatusError as e:
+                    self.logger.debug(
+                        f"_async_get_website_contents: HTTPStatusError {e}, Retrying in {self.retry_delay} seconds..."
+                    )
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                except Exception as e:
+                    self.logger.error(
+                        f"_async_get_website_contents: Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                    )
+                    return f"Failed to get website contents, reason: {e.__class__.__name__} {e}"
+                else:
+                    if self.cache:
+                        self.cache.add(url, website_contents)
+                    break
         if website_contents:
             return website_contents
         else:
@@ -309,10 +412,10 @@ class DDGSearch:
                 return html
         except Exception as e:
             self.logger.error(
-                f"_clean_html: Failed to clean HTML, reason: {e.__class__.__name__} {e}. Cleaning did not applied.({type(html)}, {textwrap.shorten(html, width=200, placeholder='…')})",
+                f"_clean_html: Failed to clean HTML, reason: {e.__class__.__name__} {e}. Cleaning did not applied.",
                 exc_info=True,
             )
             return html
 
 
-__all__ = ["DDGSearch", "HTMLCleaning"]
+__all__ = ["HTMLCleaning", "DDGSearch", "DDGSearchCache"]

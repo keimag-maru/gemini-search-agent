@@ -35,6 +35,7 @@ class GeminiAgent:
             google_api_key (Union[str, None], optional): Gemini API Key. Use "GOOGLE_API_KEY" environment variable will be used if None is specified. Defaults to None.
             retries (int, optional): Number of retries before giving up. Retry forever if -1 is specified. Defaults to -1.
             retry_delay (int, optional): Sleep seconds between retries. Follow delay seconds from Google's response if -1 is specified. Defaults to -1.
+            **kwargs: Additional keyword arguments passed directly to the `langchain_google_genai.ChatGoogleGenerativeAI` constructor.
         """
         self.retries = retries
         self.retry_delay = retry_delay
@@ -192,10 +193,10 @@ class GeminiAgent:
         if retry_delay:
             return int(retry_delay.group(1))
         else:
-            self.logger.debug(
-                "_extract_retry_delay: Could not extract retry delay from error message. Defaulting to 5 seconds."
+            self.logger.info(
+                "_extract_retry_delay: Could not extract retry delay from error message. Defaulting to 2 seconds."
             )
-            return 5
+            return 2
 
 
 __all__ = ["GeminiAgent"]
