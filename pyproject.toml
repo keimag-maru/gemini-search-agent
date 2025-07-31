@@ -56,7 +56,7 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = "-s"
+addopts = "-s -vvv"
 
 [project.urls]
 Documentation = "https://github.com/keimag-maru/gemini-search-agent#readme"

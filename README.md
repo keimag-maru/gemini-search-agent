@@ -1,23 +1,20 @@
 # Gemini Search Agent
-**[README in English is here.](README_en.md)**
+**[日本語版READMEはこちら](README_ja.md)**
 
-Langgraphを使用した検索機能付きAIエージェントのラッパークラスです。
+This is a wrapper class for an AI agent with search functionality using Langgraph.
 
-本リポジトリには
+This repository includes
+- A custom crawling tool using [ddgs](https://pypi.org/project/ddgs/) and [httpx](https://pypi.org/project/httpx) and httpx.  
+    (Supports text extraction using [Beautifulsoup4](https://pypi.org/project/beautifulsoup4/), [readability-lxml](https://pypi.org/project/readability-lxml/), or [trafilatura](https://github.com/adbar/trafilatura))
+- A wrapper class for the Langgraph ReAct agent incorporating the above tools
 
-- [ddgs](https://pypi.org/project/ddgs/)と[httpx](https://pypi.org/project/httpx)を使用した独自クローリングツール  
-  （[Beautifulsoup4](https://pypi.org/project/beautifulsoup4/)、[readability-lxml](https://pypi.org/project/readability-lxml/)、[trafilatura](https://github.com/adbar/trafilatura)のいずれかによる本文抽出に対応）
-- 上記ツールを組み込んだLanggraph ReAct agentのラッパークラス
-
-が含まれています。
-
-## インストール
+## Installation
 ```powershell
 pip install "git+https://github.com/keimag-maru/gemini-search-agent.git#egg=gemini-search-agent[all]"
 ```
 
-## 使い方
-### 非同期実行のサンプルコード
+## Usage
+### Sample code for asynchronous execution
 ```python
 import asyncio
 
@@ -25,32 +22,32 @@ from gemini_search_agent import DDGSearch, HTMLCleaning, GeminiAgent
 
 
 async def main():
-    SYSTEM_PROMPT = "ユーザから与えられたキーワードでweb検索をし、得られた各ウェブサイトについて、それぞれタイトルとURL、100字要約を生成してください。"
+    SYSTEM_PROMPT = "Perform a web search using user-supplied keywords and generate a title, URL, and a 100-character summary for each website found."
     agent = GeminiAgent(
         model_name="gemini-2.5-flash",
         tools=[DDGSearch(cleaning=HTMLCleaning.remove_tags).tool],
         system_prompt=SYSTEM_PROMPT,
     )
-    response = await agent.ainvoke("最新のニュース")
+    response = await agent.ainvoke("the latest news")
     print(response)
 
 
 asyncio.run(main())
 ```
 
-### 同期実行のサンプルコード
+### Sample code for synchronous execution
 ```python
 from gemini_search_agent import DDGSearch, HTMLCleaning, GeminiAgent
 
 
 def main():
-    SYSTEM_PROMPT = "ユーザから与えられたキーワードでweb検索をし、得られた各ウェブサイトについて、それぞれタイトルとURL、100字要約を生成してください。"
+    SYSTEM_PROMPT = "Perform a web search using user-supplied keywords and generate a title, URL, and a 100-character summary for each website found."
     agent = GeminiAgent(
         model_name="gemini-2.5-flash",
         tools=[DDGSearch(cleaning=HTMLCleaning.remove_tags).tool],
         system_prompt=SYSTEM_PROMPT,
     )
-    response = await agent.invoke("最新のニュース")
+    response = await agent.invoke("the latest news")
     print(response)
 
 
