@@ -87,13 +87,19 @@ class GeminiAgent:
             String of Gemini response message if "message" is set to output, or Dict of raw Gemini API response if "raw" is set to output.
             If failed to get response from Gemini, returns "" (when "message" is set to output) or None (when "raw" is set to output).
         """
-        self.messages.append({"role": role, "content": message})
+        if add_to_history:
+            messages = self.messages
+        else:
+            messages = self.messages.copy()
+        messages.append(
+            {"role": role, "content": message}
+        )  # if add_to_history is True, this means self.messages.append, otherwise just appending local variable
         retries = 0
         while True:
             if self.retries > 0 and retries > self.retries:
                 break
             try:
-                response = self.agent_executor.invoke({"messages": self.messages})
+                response = self.agent_executor.invoke({"messages": messages})
                 if not response or "messages" not in response:
                     # Retry
                     if self.retry_delay > 0:
@@ -105,8 +111,9 @@ class GeminiAgent:
                     self.logger.debug("Retrying...")
                     continue
                 message = response["messages"][-1].content
-                if add_to_history:
-                    self.messages.append({"role": "ai", "content": message})
+                messages.append(
+                    {"role": "ai", "content": message}
+                )  # if add_to_history is True, this means self.messages.append, otherwise just appending local variable
                 if output == "message":
                     return message
                 else:
@@ -147,13 +154,19 @@ class GeminiAgent:
             String of Gemini response message if "message" is set to output, or Dict of raw Gemini API response if "raw" is set to output.
             If failed to get response from Gemini, returns "" (when "message" is set to output) or None (when "raw" is set to output).
         """
-        self.messages.append({"role": role, "content": message})
+        if add_to_history:
+            messages = self.messages
+        else:
+            messages = self.messages.copy()
+        messages.append(
+            {"role": role, "content": message}
+        )  # if add_to_history is True, this means self.messages.append, otherwise just appending local variable
         retries = 0
         while True:
             if self.retries > 0 and retries > self.retries:
                 break
             try:
-                response = await self.agent_executor.ainvoke({"messages": self.messages})
+                response = await self.agent_executor.ainvoke({"messages": messages})
                 if not response or "messages" not in response:
                     # Retry
                     if self.retry_delay > 0:
@@ -165,8 +178,9 @@ class GeminiAgent:
                     self.logger.debug("Retrying...")
                     continue
                 message = response["messages"][-1].content
-                if add_to_history:
-                    self.messages.append({"role": "ai", "content": message})
+                messages.append(
+                    {"role": "ai", "content": message}
+                )  # if add_to_history is True, this means self.messages.append, otherwise just appending local variable
                 if output == "message":
                     return message
                 else:
