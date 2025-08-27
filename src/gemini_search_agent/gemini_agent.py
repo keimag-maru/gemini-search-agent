@@ -1,15 +1,21 @@
 import asyncio
+import io
 import re
 import time
 from logging import getLogger
 from typing import Any, Dict, List, Literal, Union
 
+import httpx
+from google import genai
+from google.genai.errors import 
 from google.api_core.exceptions import ResourceExhausted
+from google.genai import types
 from langchain_core.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
+from pathlib import Path
 
-from .ddg_search import DDGSearch
+from .tools.ddg_search import DDGSearch
 
 
 class GeminiAgent:
@@ -19,9 +25,11 @@ class GeminiAgent:
     def __init__(
         self,
         model_name: str = "gemini-2.5-flash",
-        tools: List[BaseTool] = [DDGSearch().tool],
+        tools: List[genai.types.FunctionDeclaration] = [DDGSearch().tool],
+        enable_grounding: bool = False,
+        enable_url_context: bool = False,
         system_prompt: str = COMMON_SYSTEM_PROMPT,
-        google_api_key: Union[str, None] = None,
+        api_key: Union[str, None] = None,
         retries: int = -1,
         retry_delay: int = -1,
         **kwargs,
@@ -30,21 +38,28 @@ class GeminiAgent:
 
         Args:
             model_name (str, optional): Gemini model name (See: https://ai.google.dev/gemini-api/docs/models). Defaults to "gemini-2.5-flash".
-            tools (List[BaseTool], optional): _description_. Defaults to [DDGSearch().tool].
+            tools (List[BaseTool], optional): Functions used by Gemini. Defaults to [DDGSearch().tool].
             system_prompt (str, optional): . Defaults to GeminiAgent.COMMON_SYSTEM_PROMPT.
             google_api_key (Union[str, None], optional): Gemini API Key. Use "GOOGLE_API_KEY" environment variable will be used if None is specified. Defaults to None.
             retries (int, optional): Number of retries before giving up. Retry forever if -1 is specified. Defaults to -1.
             retry_delay (int, optional): Sleep seconds between retries. Follow delay seconds from Google's response if -1 is specified. Defaults to -1.
             **kwargs: Additional keyword arguments passed directly to the `langchain_google_genai.ChatGoogleGenerativeAI` constructor.
         """
+        self.client = genai.Client(api_key=api_key)
+        if tools or enable_grounding or enable_url_context:
+            self.tools = genai.types.Tool(function_declarations=tools)
+            if enable_grounding:
+                if re.match("gemini-(exp|1.5).*", model_name):
+                    self.tools.google_search_retrieval = genai.types.GoogleSearchRetrieval()
+                else:
+                    self.tools.google_search = genai.types.GoogleSearch()
+            if enable_url_context:
+                self.tools.url_context = genai.types.UrlContext()
+        else:
+            self.tools = None
+        # -----
         self.retries = retries
         self.retry_delay = retry_delay
-        kwargs["model"] = model_name
-        kwargs["max_retries"] = 0
-        if google_api_key:
-            kwargs["google_api_key"] = google_api_key
-        model = ChatGoogleGenerativeAI(**kwargs)
-        self.agent_executor = create_react_agent(model, tools)
         if system_prompt:
             self.messages = [{"role": "system", "content": system_prompt}]
         else:
@@ -71,6 +86,7 @@ class GeminiAgent:
     def invoke(
         self,
         message: str,
+        file: Union[str, Path, None] = None,
         role: str = "user",
         output: Union[Literal["message"], Literal["raw"]] = "message",
         add_to_history: bool = True,

@@ -1,13 +1,18 @@
 import asyncio
+import os
+import pathlib
+import sys
 import time
 from enum import Enum
 from logging import getLogger
+from pathlib import Path
 from typing import Callable, Dict, List, Union
-
 import httpx
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException, RatelimitException
-from langchain_core.tools import StructuredTool
+from google.genai import types
+
+from .tool import Tool
 
 
 class HTMLCleaning(Enum):
@@ -178,6 +183,28 @@ class DDGSearch:
         self.filter_func = filter_func
         self.tool: StructuredTool = StructuredTool.from_function(
             func=self.search_with_contents, coroutine=self.search_with_contents_async
+        )
+
+    @property
+    def tool(self) -> Tool:
+        return Tool(
+            func=self.search_with_contents,
+            coroutine=self.search_with_contents_async,
+            declaration=types.FunctionDeclaration(
+                name="search_with_contents",
+                description="Search keywords with DuckDuckGo Text Search and return search results with each websites' contents.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "query": types.Schema(
+                            type=types.Type.STRING,
+                            description="Search query (general search commands are available such as `-{excludeword}`, `site:{website}` and `filetype:{filetype}`), e.g. 今日の天気 site:tenki.jp",
+                        )
+                    },
+                    required=["query"],
+                    property_ordering=["query"],  # Must enumerate all parameters here When new parameters are added.
+                ),
+            ),
         )
 
     def search_with_contents(
