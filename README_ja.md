@@ -1,13 +1,13 @@
 # Gemini Search Agent
 **[README in English is here.](README_en.md)**
 
-Langgraphを使用した検索機能付きAIエージェントのラッパークラスです。
+検索機能付きGemini AIエージェントです。
 
 本リポジトリには
 
 - [ddgs](https://pypi.org/project/ddgs/)と[httpx](https://pypi.org/project/httpx)を使用した独自クローリングツール  
   （[Beautifulsoup4](https://pypi.org/project/beautifulsoup4/)、[readability-lxml](https://pypi.org/project/readability-lxml/)、[trafilatura](https://github.com/adbar/trafilatura)のいずれかによる本文抽出に対応）
-- 上記ツールを組み込んだLanggraph ReAct agentのラッパークラス
+- 上記ツールを組み込んだ[`google-genai` SDK](https://ai.google.dev/gemini-api/docs/libraries?hl=ja)のラッパークラス
 
 が含まれています。
 
@@ -38,8 +38,11 @@ async def main():
 asyncio.run(main())
 ```
 
-### 同期実行のサンプルコード
-```python
+### ~~同期実行のサンプルコード~~
+>[!NOTE]
+>同期実行はversion2の大幅な改変により、現在未実装です。
+
+<!-- ```python
 from gemini_search_agent import DDGSearch, HTMLCleaning, GeminiAgent
 
 
@@ -55,4 +58,4 @@ def main():
 
 
 main()
-```
+``` -->

@@ -1,10 +1,8 @@
 from typing import Callable, Coroutine
 
-import google.genai.types
-
 
 class Tool:
-    def __init__(self, func: Callable, coroutine: Coroutine, declaration: google.genai.types.FunctionDeclaration):
+    def __init__(self, func: Callable, coroutine: Coroutine, declaration: dict):
         self.func = func
         self.coroutine = coroutine
         self.declaration = declaration
@@ -16,5 +14,11 @@ class Tool:
         return await self.coroutine(**kwargs)
 
     @property
-    def name(self) -> str | None:
-        return self.declaration.name
+    def name(self) -> str:
+        return self.declaration.get("name", self.func.__name__)
+
+    def __str__(self) -> str:
+        return f'<Tool "{self.name}" invoke->{self.func.__name__} ainvoke->{self.coroutine.__name__}'
+
+    def __repr__(self) -> str:
+        return f"{self.name} Tool"

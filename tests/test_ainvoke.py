@@ -1,6 +1,6 @@
 import pytest
 
-from gemini_search_agent.new_gemini_agent import GeminiAgent
+from gemini_search_agent.gemini_agent import GeminiAgent
 from gemini_search_agent.tools.ddg_search import DDGSearch, HTMLCleaning
 
 
