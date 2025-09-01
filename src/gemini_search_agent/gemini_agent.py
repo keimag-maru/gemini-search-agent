@@ -234,7 +234,7 @@ class GeminiAgent:
             timeout=30,
         ) as client:
             attached_files = await asyncio.gather(*[upload_file(file, client) for file in files])
-            attached_files = (file for file in attached_files if file is not None)
+            attached_files = [file for file in attached_files if file is not None]
 
         # Call Gemini with retries
         while True:
