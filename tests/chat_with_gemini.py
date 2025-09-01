@@ -19,7 +19,13 @@ async def main():
         enable_url_context=True,
     )
 
-    print(await gemini.ainvoke("このPDFについて説明して", files=[r"C:\Users\user\Downloads\SJPJA01A-B071B136-LB.pdf"]))
+    print(
+        await gemini.ainvoke(
+            "このPDFについて説明して",
+            files=[r"https://discovery.ucl.ac.uk/id/eprint/10089234/1/343019_3_art_0_py4t4l_convrt.pdf"],
+            output_format="raw",
+        )
+    )
 
     while True:
         print(await gemini.ainvoke(input("> "), output_format="raw"))

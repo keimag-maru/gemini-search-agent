@@ -15,7 +15,10 @@ This repository includes
 >This has allowed us to reduce the package size and keep up with the latest Gemini specifications.  
 >**The `invoke` method of GeminiAgent has not been implemented as of version 2.0.0**,
 >and **previously available optional parameters and functions have been discontinued or changed**.  
->**If you are migrating from version 1.xx, please check [here](https://github.com/keimag-maru/gemini-search-agent/releases/tag/v2.0.0) and rewrite your code.**
+> **If you are migrating from version 1.xx, please check [this page](https://github.com/keimag-maru/gemini-search-agent/releases/tag/v2.0.0) and update your code accordingly.**  
+> Alternatively, you can continue using the v1 series by installing or updating with:  
+> `pip install "git+https://github.com/keimag-maru/gemini-search-agent.git@v1#egg=gemini-search-agent[all]"`
+> (No further updates will be provided).
 
 
 ## Installation
