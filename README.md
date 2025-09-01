@@ -9,12 +9,13 @@ This repository includes
 - A wrapper class for [`google-genai` SDK](https://ai.google.dev/gemini-api/docs/libraries) incorporating the above tools
 
 
->[!CAUTION] Breaking Changes
+>[!IMPORTANT]
+>***Breaking Changes***  
 >From version 2.0.0 onwards, we have stopped using langchain and langgraph and switched to an implementation using `google-genai`.  
 >This has allowed us to reduce the package size and keep up with the latest Gemini specifications.  
 >**The `invoke` method of GeminiAgent has not been implemented as of version 2.0.0**,
 >and **previously available optional parameters and functions have been discontinued or changed**.  
->**If you are migrating from version 1.xx, please check [here](https://github.com/keimag-maru/gemini-search-agent/releases/tag/v2.0.0) and rewrite your code. **
+>**If you are migrating from version 1.xx, please check [here](https://github.com/keimag-maru/gemini-search-agent/releases/tag/v2.0.0) and rewrite your code.**
 
 
 ## Installation

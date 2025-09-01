@@ -12,7 +12,8 @@
 が含まれています。
 
 
->[!CAUTION] 破壊的変更
+>[!IMPORTANT]
+>***破壊的変更***  
 >version 2.0.0以降では、langchainとlanggraphの使用を止め、`google-genai`での実装に切り替えました。  
 >これにより、パッケージサイズの縮小やGeminiの最新仕様への追従が可能になりました。  
 >**version2.0.0時点では、GeminiAgentの`invoke`メソッドが未実装**なほか、
