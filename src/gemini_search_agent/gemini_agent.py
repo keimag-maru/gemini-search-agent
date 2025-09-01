@@ -281,7 +281,7 @@ class GeminiAgent:
 
     def _guess_filetype(self, response: httpx.Response):
         if response.headers.get("Content-Type", ""):
-            return response.headers.get["Content-Type"]
+            return response.headers["Content-Type"]
         else:
             url = str(response.url).lower()
             if url.endswith(".pdf"):
