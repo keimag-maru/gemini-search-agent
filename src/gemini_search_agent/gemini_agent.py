@@ -303,30 +303,31 @@ class GeminiAgent:
 
     def _guess_filetype(self, response: httpx.Response):
         if response.headers.get("Content-Type", ""):
-            return response.headers["Content-Type"]
+            mime_type = re.match("(.+/.+);?", response.headers["Content-Type"])
+            if mime_type and len(mime_type.groups()) > 1:
+                return mime_type.group(1)
+        url = str(response.url).lower()
+        if url.endswith(".pdf"):
+            mime_type = "application/pdf"
+        elif url.endswith(".xml"):
+            mime_type = "application/xml"
+        elif url.endswith((".html", ".htm")):
+            mime_type = "text/html"
+        elif url.endswith(".md"):
+            mime_type = "text/markdown"
+        elif url.endswith(".png"):
+            mime_type = "image/png"
+        elif url.endswith((".jpeg", ".jpg")):
+            mime_type = "image/jpeg"
+        elif url.endswith(".webp"):
+            mime_type = "image/webp"
+        elif url.endswith(".heic"):
+            mime_type = "image/heic"
+        elif url.endswith(".heif"):
+            mime_type = "image/heif"
         else:
-            url = str(response.url).lower()
-            if url.endswith(".pdf"):
-                mime_type = "application/pdf"
-            elif url.endswith(".xml"):
-                mime_type = "application/xml"
-            elif url.endswith((".html", ".htm")):
-                mime_type = "text/html"
-            elif url.endswith(".md"):
-                mime_type = "text/markdown"
-            elif url.endswith(".png"):
-                mime_type = "image/png"
-            elif url.endswith((".jpeg", ".jpg")):
-                mime_type = "image/jpeg"
-            elif url.endswith(".webp"):
-                mime_type = "image/webp"
-            elif url.endswith(".heic"):
-                mime_type = "image/heic"
-            elif url.endswith(".heif"):
-                mime_type = "image/heif"
-            else:
-                mime_type = "text/plain"
-            return mime_type
+            mime_type = "text/html"
+        return mime_type
 
 
 __all__ = ["GeminiAgent"]

@@ -1,8 +1,8 @@
 import asyncio
 import logging
 
+from gemini_search_agent import DDGSearch, HTMLCleaning
 from gemini_search_agent.gemini_agent import GeminiAgent
-from src.gemini_search_agent import DDGSearch, HTMLCleaning
 
 logging.getLogger("DDGSearch").setLevel(logging.DEBUG)
 logging.getLogger("GeminiSearchAgent").setLevel(logging.DEBUG)
