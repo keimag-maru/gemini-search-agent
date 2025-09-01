@@ -1,11 +1,11 @@
-from gemini_search_agent.ddg_search import DDGSearch, HTMLCleaning
 from gemini_search_agent.gemini_agent import GeminiAgent
+from gemini_search_agent.tools.ddg_search import DDGSearch, HTMLCleaning
 
 
 def test_agent_search():
     SYSTEM_PROMPT = "ユーザから与えられたキーワードでweb検索をし、得られた各ウェブサイトについて、それぞれタイトルとURL、100字要約を生成してください。"
     agent = GeminiAgent(
-        model_name="gemini-2.5-flash-lite-preview-06-17",
+        model_name="gemini-2.5-flash-lite",
         tools=[DDGSearch(cleaning=HTMLCleaning.none).tool],
         system_prompt=SYSTEM_PROMPT,
     )
@@ -24,7 +24,7 @@ def test_agent_search_remove_tags():
     )
     response = agent.invoke("最新のニュース")
     assert response is not None
-    print("メソッド: ", HTMLCleaning.none)
+    print("メソッド: ", HTMLCleaning.remove_tags)
     print("レスポンス:", response)
 
 
@@ -37,7 +37,7 @@ def test_agent_search_readability_lxml():
     )
     response = agent.invoke("最新のニュース")
     assert response is not None
-    print("メソッド: ", HTMLCleaning.none)
+    print("メソッド: ", HTMLCleaning.readability_lxml)
     print("レスポンス:", response)
 
 
@@ -50,5 +50,5 @@ def test_agent_search_trafilatura():
     )
     response = agent.invoke("最新のニュース")
     assert response is not None
-    print("メソッド: ", HTMLCleaning.none)
+    print("メソッド: ", HTMLCleaning.trafilatura)
     print("レスポンス:", response)

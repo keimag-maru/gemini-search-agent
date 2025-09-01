@@ -7,7 +7,9 @@ from typing import Callable, Dict, List, Union
 import httpx
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException, RatelimitException
-from langchain_core.tools import StructuredTool
+from google.genai import types
+
+from .tool import Tool
 
 
 class HTMLCleaning(Enum):
@@ -176,8 +178,26 @@ class DDGSearch:
         self.retries = retries
         self.retry_delay = retry_delay
         self.filter_func = filter_func
-        self.tool: StructuredTool = StructuredTool.from_function(
-            func=self.search_with_contents, coroutine=self.search_with_contents_async
+
+    @property
+    def tool(self) -> Tool:
+        return Tool(
+            func=self.search_with_contents,
+            coroutine=self.search_with_contents_async,
+            declaration={
+                "name": "search_with_contents",
+                "description": "Search keywords with DuckDuckGo Text Search and return search results with each websites' contents.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (general search commands are available such as `-{excludeword}`, `site:{website}` and `filetype:{filetype}`), e.g. 今日の天気 site:tenki.jp",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
         )
 
     def search_with_contents(
@@ -196,6 +216,7 @@ class DDGSearch:
             If Search query is specified to query, returns list of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
+        self.logger.info(f"search_with_contents({query=})")
         with httpx.Client(
             headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
         ) as client:
@@ -255,6 +276,7 @@ class DDGSearch:
             String of website contents HTML (may be cleaned depends on HTMLCleaning parameter),
             or String "Failed to get website contents, reason: {reason}" if there was an error.
         """
+        self.logger.debug(f"_get_website_contents({client=}, {url=})")
         if not url:
             return "Failed to get website contents, reason: No url was provided."
         if self.cache:
@@ -310,6 +332,7 @@ class DDGSearch:
             If Search query is specified to query, returns list of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
+        self.logger.info(f"search_with_contents_async({query=})")
         async with httpx.AsyncClient(
             headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
         ) as client:
@@ -374,6 +397,7 @@ class DDGSearch:
             String of website contents HTML (may be cleaned depends on HTMLCleaning parameter),
             or String "Failed to get website contents, reason: {reason}" if there was an error.
         """
+        self.logger.debug(f"_get_website_contents_async({client=}, {url=})")
         if not url:
             return "Failed to get website contents, reason: No url was provided."
         if self.cache:

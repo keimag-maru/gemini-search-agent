@@ -1,6 +1,6 @@
 import pytest
 
-from gemini_search_agent.ddg_search import DDGSearch
+from gemini_search_agent.tools.ddg_search import DDGSearch
 
 
 def filter_func(search_results):
