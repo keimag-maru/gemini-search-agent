@@ -206,58 +206,64 @@ class DDGSearch:
     ) -> Union[List[Dict[str, str]], str]:
         """Search keywords with DuckDuckGo Text Search and return search results with each websites' contents.
 
+        Get specified website contents asynchronously is also supported.
+
         Args:
-            query (str): Search query (Query params: https://duckduckgo.com/params).
+            query (str): Search query (Query params: https://duckduckgo.com/params) or URL.
 
         Returns:
-            List of dictionaries with search results with each websites' contents,
+            If URL is specified to query, returns contents of the website or String "Failed to get website contents, reason: {reason}" if there was an error.
+            If Search query is specified to query, returns list of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
         self.logger.info(f"search_with_contents({query=})")
         with httpx.Client(
             headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
         ) as client:
-            search_results: List[Dict[str, str]] = []
-            for _ in range(self.retries):
-                try:
-                    with DDGS(self.proxy, self.timeout, self.verify) as ddgs:
-                        search_results = ddgs.text(
-                            query=query,
-                            region=self.region,
-                            safesearch=self.safesearch,
-                            timelimit=self.timelimit,
-                            num_results=self.num_results,
-                            page=self.page,
-                            backend=self.backend,
+            if query.startswith("http://") or query.startswith("https://"):
+                return self._get_website_contents(client, query)
+            else:
+                search_results: List[Dict[str, str]] = []
+                for _ in range(self.retries):
+                    try:
+                        with DDGS(self.proxy, self.timeout, self.verify) as ddgs:
+                            search_results = ddgs.text(
+                                query=query,
+                                region=self.region,
+                                safesearch=self.safesearch,
+                                timelimit=self.timelimit,
+                                num_results=self.num_results,
+                                page=self.page,
+                                backend=self.backend,
+                            )
+                            if not search_results:
+                                time.sleep(self.retry_delay)
+                                continue
+                            if self.num_results and len(search_results) > self.num_results:
+                                search_results = search_results[: self.num_results]
+                    except RatelimitException:
+                        time.sleep(self.retry_delay)
+                        continue
+                    except DDGSException as e:
+                        self.logger.error(
+                            f"search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
                         )
-                        if not search_results:
-                            time.sleep(self.retry_delay)
-                            continue
-                        if self.num_results and len(search_results) > self.num_results:
-                            search_results = search_results[: self.num_results]
-                except RatelimitException:
-                    time.sleep(self.retry_delay)
-                    continue
-                except DDGSException as e:
+                        return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
+                    else:
+                        break
+                if not search_results:
                     self.logger.error(
-                        f"search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
+                        f"search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
                     )
-                    return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
-                else:
-                    break
-            if not search_results:
-                self.logger.error(
-                    f"search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
-                )
-                return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
-            if self.filter_func:
-                search_results = self.filter_func(search_results)
-            for result in search_results:
-                if (not self.filter_func) or ("contents" in result):
-                    url = result.get("href", "")
-                    result["contents"] = self._get_website_contents(client, url)
-            self.logger.debug(f"search_with_contents: {search_results=}")
-            return search_results
+                    return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
+                if self.filter_func:
+                    search_results = self.filter_func(search_results)
+                for result in search_results:
+                    if (not self.filter_func) or ("contents" in result):
+                        url = result.get("href", "")
+                        result["contents"] = self._get_website_contents(client, url)
+                self.logger.debug(f"search_with_contents: {search_results=}")
+                return search_results
 
     def _get_website_contents(self, client: httpx.Client, url: str) -> str:
         """Get specified website contents.
@@ -316,63 +322,69 @@ class DDGSearch:
     ) -> Union[List[Dict[str, str]], str]:
         """Search keywords with DuckDuckGo Text Search and return search results with each websites' contents asynchronously.
 
+        Get specified website contents asynchronously is also supported.
+
         Args:
-            query (str): Search Query (Query params: https://duckduckgo.com/params).
+            query (str): Search Query (Query params: https://duckduckgo.com/params) or URL.
 
         Returns:
-            List of dictionaries with search results with each websites' contents,
+            If URL is specified to query, returns contents of the website or String "Failed to get website contents, reason: {reason}" if there was an error.
+            If Search query is specified to query, returns list of dictionaries with search results with each websites' contents,
             or String "Failed to get search results, reason: {reason}" if there was an error.
         """
         self.logger.info(f"search_with_contents_async({query=})")
         async with httpx.AsyncClient(
             headers=self.headers, verify=self.verify, timeout=self.timeout, follow_redirects=True
         ) as client:
-            search_results: List[Dict[str, str]] = []
-            for _ in range(self.retries):
-                try:
-                    with DDGS(self.proxy, self.timeout, self.verify) as ddgs:
-                        search_results = ddgs.text(
-                            query=query,
-                            region=self.region,
-                            safesearch=self.safesearch,
-                            timelimit=self.timelimit,
-                            num_results=self.num_results,
-                            page=self.page,
-                            backend=self.backend,
+            if query.startswith("http://") or query.startswith("https://"):
+                return await self._get_website_contents_async(client, query)
+            else:
+                search_results: List[Dict[str, str]] = []
+                for _ in range(self.retries):
+                    try:
+                        with DDGS(self.proxy, self.timeout, self.verify) as ddgs:
+                            search_results = ddgs.text(
+                                query=query,
+                                region=self.region,
+                                safesearch=self.safesearch,
+                                timelimit=self.timelimit,
+                                num_results=self.num_results,
+                                page=self.page,
+                                backend=self.backend,
+                            )
+                            if not search_results:
+                                await asyncio.sleep(self.retry_delay)
+                                continue
+                            if self.num_results and len(search_results) > self.num_results:
+                                search_results = search_results[: self.num_results]
+                    except RatelimitException:
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    except DDGSException as e:
+                        self.logger.error(
+                            f"async_search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
                         )
-                        if not search_results:
-                            await asyncio.sleep(self.retry_delay)
-                            continue
-                        if self.num_results and len(search_results) > self.num_results:
-                            search_results = search_results[: self.num_results]
-                except RatelimitException:
-                    await asyncio.sleep(self.retry_delay)
-                    continue
-                except DDGSException as e:
+                        return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
+                    else:
+                        break
+                if not search_results:
                     self.logger.error(
-                        f"async_search_with_contents: Failed to get search results, reason: {e.__class__.__name__} {e}"
+                        f"async_search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
                     )
-                    return f"Failed to get search results, reason: {e.__class__.__name__} {e}"
-                else:
-                    break
-            if not search_results:
-                self.logger.error(
-                    f"async_search_with_contents: Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
-                )
-                return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
-            if self.filter_func:
-                search_results = self.filter_func(search_results)
-            urls = [
-                (i, result.get("href", ""))
-                for i, result in enumerate(search_results)
-                if (not self.filter_func) or ("contents" in result)
-            ]  # (index, url)
-            tasks = [self._get_website_contents_async(client, url[1]) for url in urls]
-            website_contents = await asyncio.gather(*tasks)
-            for (i, _), contents in zip(urls, website_contents):
-                search_results[i]["contents"] = contents
-            self.logger.debug(f"search_with_contents_async: {search_results=}")
-            return search_results
+                    return f"Failed to get search results, reason: Empty search results was provided from DuckDuckGo after {self.retries} retries."
+                if self.filter_func:
+                    search_results = self.filter_func(search_results)
+                urls = [
+                    (i, result.get("href", ""))
+                    for i, result in enumerate(search_results)
+                    if (not self.filter_func) or ("contents" in result)
+                ]  # (index, url)
+                tasks = [self._get_website_contents_async(client, url[1]) for url in urls]
+                website_contents = await asyncio.gather(*tasks)
+                for (i, _), contents in zip(urls, website_contents):
+                    search_results[i]["contents"] = contents
+                self.logger.debug(f"search_with_contents_async: {search_results=}")
+                return search_results
 
     async def _get_website_contents_async(self, client: httpx.AsyncClient, url: str) -> str:
         """Get specified website contents asynchronously.
