@@ -173,7 +173,8 @@ class GeminiAgent:
         files: List[Union[str, Path]] = [],
         thinking_budget: Optional[int] = None,
         response_schema: Optional[Union[pydantic.BaseModel, Dict, List, Enum, Any]] = None,
-        output_format: Union[Literal["message"], Literal["raw"]] = "message",
+        output_format: Literal["message", "raw"] = "message",
+        on_files_url_unscrapable: Literal["raise", "continue"] = "continue",
     ) -> Union[str, genai.types.GenerateContentResponse, Any, None]:
         """Call Gemini API and get response.
 
@@ -186,6 +187,9 @@ class GeminiAgent:
             response_schema (pydantic.BaseModel | dict | list | Enum | Any, optional): Schema definition for structured output. Pydantic object, JSON dict, Enum, etc. are supported. Defaults to None (No structured output).
                 See: https://ai.google.dev/gemini-api/docs/structured-output for more details.
             output_format ("message" or "raw", optional): "message" for response message or "raw" for raw Gemini API response. Defaults to "message".
+            on_files_url_unscrapable ("raise" or "continue"): Specify behavior when a URL of a file cannot be scraped (httpx.ReadTimeout or status_code is 401).
+                "raise" for raising the error occurred and "continue" for continuing without the file.
+                Defaults to "continue".
 
         Returns:
             response:
@@ -204,15 +208,33 @@ class GeminiAgent:
             if isinstance(file, Path) or not (file.startswith("http://") or file.startswith("https://")):
                 return await self.client.aio.files.upload(file=file)
             else:
-                res = await client.get(file)
+                try:
+                    res = await client.get(file)
+                    if res.status_code in [423, 425, 429, 503]:
+                        await asyncio.sleep(30)
+                        res = await client.get(file)
+                except httpx.ReadTimeout as e:
+                    if on_files_url_unscrapable == "raise":
+                        raise e
+                    else:
+                        return None
+                if res.status_code in [401, 403, 407, 451, 503, 504]:
+                    if on_files_url_unscrapable != "raise":
+                        return None
                 res.raise_for_status()
                 doc_io = io.BytesIO(res.content)
                 mime_type = self._guess_filetype(res)
                 doc_io.seek(0)
                 return await self.client.aio.files.upload(file=doc_io, config=dict(mime_type=mime_type))
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+            },
+            timeout=30,
+        ) as client:
             attached_files = await asyncio.gather(*[upload_file(file, client) for file in files])
+            attached_files = (file for file in attached_files if file is not None)
 
         # Call Gemini with retries
         while True:
