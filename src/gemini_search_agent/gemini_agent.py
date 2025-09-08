@@ -5,7 +5,7 @@ import threading
 from enum import Enum
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import httpx
 import pydantic
@@ -78,6 +78,7 @@ class GeminiAgent:
         if default_thinking_budget:
             self._config.thinking_config = types.ThinkingConfig(thinking_budget=default_thinking_budget)
         self.chat = self.client.aio.chats.create(model=self.model_name, config=self._config)
+        self.files = None
 
     @property
     def system_prompt(self):
@@ -170,7 +171,7 @@ class GeminiAgent:
     async def ainvoke(
         self,
         message: str,
-        files: List[Union[str, Path]] = [],
+        files: Union[List[Union[str, Path]], List[Tuple[str, Union[str, Path]]]] = [],
         thinking_budget: Optional[int] = None,
         response_schema: Optional[Union[pydantic.BaseModel, Dict, List, Enum, Any]] = None,
         output_format: Literal["message", "raw"] = "message",
@@ -180,7 +181,8 @@ class GeminiAgent:
 
         Args:
             message (str): Input message
-            files (list[str | pathlib.Path]): Filepath or URL of documents (such as PDF and HTML) and images (PNG, JPEG, WebP, HEIC or HEIF) to be attached to the message. Defaults to [] (No file attachment).
+            files (list[str | pathlib.Path] | list[tuple]): Filepath or URL of documents (such as PDF and HTML) and images (PNG, JPEG, WebP, HEIC or HEIF) to be attached to the message. Defaults to [] (No file attachment).
+                If you specify filenames, try `files=[(filepath, filename), ...]`.
                 See https://ai.google.dev/gemini-api/docs/document-processing and https://ai.google.dev/gemini-api/docs/image-understanding for more details.
             thinking_budget (int): The number of thinking tokens to use when generating a response. Defaults to None (Use default_thinking_budget).
                 See: https://ai.google.dev/gemini-api/docs/thinking#set-budget for more details.
@@ -196,6 +198,10 @@ class GeminiAgent:
             String of Gemini response message if "message" is set to output, or GenerateContentResponse of raw Gemini API response if "raw" is set to output.
             If failed to get response from Gemini, returns "" (when "message" is set to output) or None (when "raw" is set to output).
         """
+        if isinstance(self.files, List):
+            for closable, _ in self.files:  # type: ignore
+                closable.close()
+            self.files.clear()
         retries = 0
         config = self._config.model_copy()
         if thinking_budget is not None:
@@ -204,9 +210,16 @@ class GeminiAgent:
             config.response_schema = response_schema
 
         # Upload files
-        async def upload_file(file: Union[str, Path], client: httpx.AsyncClient):
+        async def upload_file(file: Union[str, Path], client: httpx.AsyncClient, filename=None):
             if isinstance(file, Path) or not (file.startswith("http://") or file.startswith("https://")):
-                return await self.client.aio.files.upload(file=file)
+                if filename:
+                    config = dict(display_name=filename, name=filename)
+                else:
+                    config = None
+                upload_file = await self.client.aio.files.upload(file=file, config=config)
+                if isinstance(self.files, List):
+                    self.files.append((open(file), upload_file))
+                return upload_file
             else:
                 try:
                     res = await client.get(file)
@@ -223,9 +236,16 @@ class GeminiAgent:
                         return None
                 res.raise_for_status()
                 doc_io = io.BytesIO(res.content)
-                mime_type = self._guess_filetype(res)
+                config = dict(mime_type=self._guess_filetype(res))
+                if filename:
+                    doc_io.name = config["display_name"] = config["name"] = filename
+                else:
+                    doc_io.name = config["display_name"] = config["name"] = res.url.path.split("/")[-1]
                 doc_io.seek(0)
-                return await self.client.aio.files.upload(file=doc_io, config=dict(mime_type=mime_type))
+                upload_file = await self.client.aio.files.upload(file=doc_io, config=config)
+                if isinstance(self.files, List):
+                    self.files.append((doc_io, upload_file))
+                return upload_file
 
         async with httpx.AsyncClient(
             headers={
@@ -233,7 +253,16 @@ class GeminiAgent:
             },
             timeout=30,
         ) as client:
-            attached_files = await asyncio.gather(*[upload_file(file, client) for file in files])
+            coroutines = []
+            for file in files:
+                if isinstance(file, tuple):
+                    if len(file) > 1:
+                        coroutines.append(upload_file(file[0], client, file[1]))
+                    else:
+                        coroutines.append(upload_file(file[0], client))
+                else:
+                    coroutines.append(upload_file(file, client))
+            attached_files = await asyncio.gather(*coroutines)
             attached_files = [file for file in attached_files if file is not None]
 
         # Call Gemini with retries
