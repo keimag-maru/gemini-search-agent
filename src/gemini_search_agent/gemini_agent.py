@@ -213,7 +213,7 @@ class GeminiAgent:
         async def upload_file(file: Union[str, Path], client: httpx.AsyncClient, filename=None):
             if isinstance(file, Path) or not (file.startswith("http://") or file.startswith("https://")):
                 if filename:
-                    config = dict(display_name=filename, name=filename)
+                    config = dict(display_name=filename)
                 else:
                     config = None
                 upload_file = await self.client.aio.files.upload(file=file, config=config)
@@ -238,9 +238,9 @@ class GeminiAgent:
                 doc_io = io.BytesIO(res.content)
                 config = dict(mime_type=self._guess_filetype(res))
                 if filename:
-                    doc_io.name = config["display_name"] = config["name"] = filename
+                    doc_io.name = config["display_name"] = filename
                 else:
-                    doc_io.name = config["display_name"] = config["name"] = res.url.path.split("/")[-1]
+                    doc_io.name = config["display_name"] = res.url.path.split("/")[-1]
                 doc_io.seek(0)
                 upload_file = await self.client.aio.files.upload(file=doc_io, config=config)
                 if isinstance(self.files, List):
